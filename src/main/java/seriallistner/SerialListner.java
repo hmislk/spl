@@ -1,12 +1,12 @@
-package org.ohmis.seriallistner;
+package seriallistner;
 
 import com.fazecast.jSerialComm.SerialPort;
 import com.fazecast.jSerialComm.SerialPortDataListener;
 import com.fazecast.jSerialComm.SerialPortEvent;
 
-public class SerialListener {
+public class SerialListner {
 
-    private static String portName = "com2"; // Change this to the appropriate port name
+    private static String portName = "com3"; // Change this to the appropriate port name
     private static int baudRate = 9600; // Change this to the desired baud rate
 
     public static void main(String[] args) {
