@@ -8,25 +8,19 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
-import java.nio.charset.Charset;
 
 import java.net.HttpURLConnection;
-import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.util.Base64;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.logging.*;
 
+/*
+Authoers : Dr M H B Ariyaratne & ChatGPT
+ */
 public class SerialListner {
 
     private static String portName = "com7"; // Change this to the appropriate port name
@@ -40,6 +34,8 @@ public class SerialListner {
     private static byte[] CR_LF = {0x0D, 0x0A}; // ASCII CR and LF bytes
     static String receivedString = "";
     static int frameNumber;
+
+    static StringBuilder receivedStringBuilder = new StringBuilder();
 
     public static void main(String[] args) {
         SerialPort serialPort = SerialPort.getCommPort(portName);
@@ -55,42 +51,39 @@ public class SerialListner {
                 if (event.getEventType() != SerialPort.LISTENING_EVENT_DATA_AVAILABLE) {
                     return;
                 }
+
                 byte[] newData = new byte[serialPort.bytesAvailable()];
-                receivedString = "";
                 int numRead = serialPort.readBytes(newData, newData.length);
-                String receivedString = "";
+                String newString = "";
                 try {
-                    receivedString = new String(newData, "ASCII");
+                    newString = new String(newData, "ASCII");
                 } catch (UnsupportedEncodingException ex) {
                     Logger.getLogger(SerialListner.class.getName()).log(Level.SEVERE, null, ex);
                 }
 
-                System.out.println(receivedString);
+                System.out.println(newString);
 
-                // Send ACK
-                serialPort.writeBytes(ACK, ACK.length);
-                System.out.println("Sent ACK.");
+                receivedStringBuilder.append(newString);
 
-                receivedString = receivedString;
+                if (newString.endsWith("\u0003")) {  // Check for ASCII ETX at the end of the message
+                    receivedString = receivedStringBuilder.toString();
+                    receivedStringBuilder = new StringBuilder();  // Reset the StringBuilder for the next message
 
-                frameNumber = 1;
-                // Process the received string
-                String[] frames = splitIntoFrames(receivedString, 240);
-                for (String frame : frames) {
-                    sendFrame(serialPort, frame, frameNumber);
-                    frameNumber++;
+                    System.out.println("Full message received: " + receivedString);
+
+                    // Asynchronously process the received message
+                    final String finalReceivedString = receivedString;
+                    CompletableFuture.supplyAsync(() -> performAsyncProcessing(finalReceivedString))
+                            .thenAccept(processedMessage -> {
+                                // Handle the processed message (e.g., update UI, send response, etc.)
+                                System.out.println("Processed message: " + processedMessage);
+                            });
+
+                    // Send ACK
+                    serialPort.writeBytes(ACK, ACK.length);
                 }
-
-                System.out.println("receivedString = " + receivedString);
-
-                // Asynchronously process the received message
-                final String finalReceivedString = receivedString;
-                CompletableFuture.supplyAsync(() -> performAsyncProcessing(finalReceivedString))
-                        .thenAccept(processedMessage -> {
-                            // Handle the processed message (e.g., update UI, send response, etc.)
-                            System.out.println("Processed message: " + processedMessage);
-                        });
             }
+
         });
 
         if (serialPort.openPort()) {
@@ -103,7 +96,7 @@ public class SerialListner {
         // Keep the main thread alive
         while (true) {
             try {
-                Thread.sleep(1000);
+                Thread.sleep(100);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -176,7 +169,7 @@ public class SerialListner {
     // Perform asynchronous processing including the HTTP request
 
     private static String performAsyncProcessing(String receivedString) {
-        LOGGER.info("performAsyncProcessing");
+//        LOGGER.info("performAsyncProcessing");
         try {
             // Process the received message
             String processedMessage = processAnalyzerMessage(receivedString);
@@ -193,9 +186,9 @@ public class SerialListner {
     }
 
     public static String processAnalyzerMessage(String receivedMessage) {
-        LOGGER.info("Process Analyzer Message");
+//        LOGGER.info("Process Analyzer Message");
         try {
-            LOGGER.info("Message Received from Analyzer = " + receivedMessage);
+//            LOGGER.info("Message Received from Analyzer = " + receivedMessage);
             String msgType = null;
             String baseUrl = "http://arogyahealthlk.com/";
             String restApiUrl = baseUrl + "api/limsmw/limsProcessAnalyzerMessage";
@@ -216,14 +209,14 @@ public class SerialListner {
                 JSONObject requestBodyJson = new JSONObject();
                 String base64EncodedMessage = Base64.getEncoder().encodeToString(receivedMessage.getBytes(StandardCharsets.UTF_8));
                 requestBodyJson.put("message", base64EncodedMessage);
-                LOGGER.info("Message Received from Analyzer Encoded = " + base64EncodedMessage);
+//                LOGGER.info("Message Received from Analyzer Encoded = " + base64EncodedMessage);
                 OutputStream outputStream = connection.getOutputStream();
                 String requestBodyString = requestBodyJson.toString();
                 outputStream.write(requestBodyString.getBytes());
                 outputStream.flush();
                 outputStream.close();
                 int responseCode = connection.getResponseCode();
-                LOGGER.info("LIMS response Code = " + responseCode);
+//                LOGGER.info("LIMS response Code = " + responseCode);
                 if (responseCode == HttpURLConnection.HTTP_OK) {
                     try ( BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
                         StringBuilder responseBuilder = new StringBuilder();
@@ -232,16 +225,15 @@ public class SerialListner {
                             responseBuilder.append(line).append("\n");
                         }
                         String response = responseBuilder.toString().trim();
-                        LOGGER.info("LIMS response as it is = " + response);
+//                        LOGGER.info("LIMS response as it is = " + response);
                         JSONObject responseJson = new JSONObject(response);
                         String base64EncodedResultMessage = responseJson.getString("result");
                         byte[] decodedResultMessageBytes = Base64.getDecoder().decode(base64EncodedResultMessage);
                         String decodedResultMessage = new String(decodedResultMessageBytes, StandardCharsets.UTF_8);
 
-                        LOGGER.info("Encoded Message Received from LIMS = " + base64EncodedResultMessage);
-
-                        LOGGER.info("Decoded Message Received from LIMS = " + decodedResultMessage);
-                        LOGGER.info("LIMS sent Message Type = " + msgType);
+//                        LOGGER.info("Encoded Message Received from LIMS = " + base64EncodedResultMessage);
+//                        LOGGER.info("Decoded Message Received from LIMS = " + decodedResultMessage);
+//                        LOGGER.info("LIMS sent Message Type = " + msgType);
                         return decodedResultMessage;
                     }
                 } else {
@@ -252,7 +244,7 @@ public class SerialListner {
                             responseBuilder.append(line).append("\n");
                         }
                         String response = responseBuilder.toString().trim();
-                        LOGGER.info("response = " + response);
+//                        LOGGER.info("response = " + response);
                         return createErrorResponse(response);
                     }
                 }
